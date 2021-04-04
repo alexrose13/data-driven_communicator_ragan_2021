@@ -1,0 +1,175 @@
+---
+title: "The Data-Driven Communicator: Brand Voice"
+author: "Alexander Rose"
+date: "2/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Environment Set Up
+
+```{r package management, echo = FALSE, message=FALSE}
+# As we prepare our workspace, let's begin by ensuring that we all of the packages that we will be making use of during our analysis
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, knitr, kableExtra, tidytext, scales, SnowballC, corrplot)
+```
+
+```{r}
+set.seed(30303)
+```
+
+```{r}
+setwd([INSERT])
+
+rh_tweets_2500.data <- read_csv("raw_data/branded_twitter/RH_tweets_2500.csv")
+
+fideltiy_tweets_2500.data <- read_csv("raw_data/branded_twitter/Fidelity_tweets_2500.csv")
+
+tdameritrade_tweets_2500.data <- read_csv("raw_data/branded_twitter/TDAmeritrade_tweets_2500.csv")
+
+vangaurd_tweets_2500.data <- read_csv("raw_data/branded_twitter/Vanguard_Group_tweets_2500.csv")
+
+webull_tweets_2500.data <- read_csv("raw_data/branded_twitter/WebullGlobal_tweets_2500.csv")
+```
+
+
+```{r}
+tidy_RH.tweets <- rh_tweets_2500.data %>% 
+  unnest_tokens(word, Text) %>% 
+  anti_join(stop_words)
+```
+
+```{r}
+tidy_RH.tweets %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 75) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n)) +
+  labs(title = "Words Sorted by Frequency for @RobinhoodApp"
+       ,y = "Number of Occurances") +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip()
+
+```
+
+```{r}
+tidy_fidelty.tweets <- fideltiy_tweets_2500.data %>% 
+  unnest_tokens(word, Text) %>% 
+  anti_join(stop_words)
+```
+
+```{r}
+tidy_TDA.tweets <- tdameritrade_tweets_2500.data %>% 
+  unnest_tokens(word, Text) %>% 
+  anti_join(stop_words)
+```
+
+```{r}
+tidy_vangaurd.tweets <- vangaurd_tweets_2500.data %>% 
+  unnest_tokens(word, Text) %>% 
+  anti_join(stop_words)
+```
+
+```{r}
+tidy_webullGlobal.tweets <- webull_tweets_2500.data %>% 
+  unnest_tokens(word, Text) %>% 
+  anti_join(stop_words)
+```
+
+```{r}
+#unique(frequency$Username)
+```
+
+
+```{r}
+frequency <- bind_rows(tidy_RH.tweets
+          ,tidy_fidelty.tweets
+          ,tidy_TDA.tweets
+          ,tidy_vangaurd.tweets
+          ,tidy_webullGlobal.tweets) %>% 
+  mutate(word = str_extract(word, "[a-z']+")) %>% 
+  count(Username, word) %>% 
+  group_by(Username) %>% 
+  mutate(proportion = n / sum(n)) %>% 
+  select(-n) %>% 
+  spread(Username, proportion) %>% 
+  select(word, RobinhoodApp, everything()) %>% 
+  gather(Username, proportion, Fidelity:WebullGlobal)
+```
+
+
+```{r}
+data1 <- frequency %>% 
+  filter(Username == "WebullGlobal" | Username == "TDAmeritrade")
+
+ggplot(data1, aes(x = proportion, y = RobinhoodApp, 
+                      color = abs(RobinhoodApp - proportion))) +
+  geom_abline(color = "gray40", lty = 2) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  scale_color_gradient(limits = c(0, 0.001), 
+                       low = "#FF8F54", high = "gray75") +
+  facet_wrap(~Username, ncol = 2) +
+  theme(legend.position="none") +
+  labs(y = "RobinhoodApp", x = NULL)
+```
+
+```{r}
+cor.test(frequency$RobinhoodApp, frequency$RobinhoodApp)
+```
+
+```{r}
+cor.test(data = frequency[frequency$Username == "WebullGlobal",],
+         ~ proportion + RobinhoodApp)
+```
+
+```{r}
+cor.test(data = frequency[frequency$Username == "TDAmeritrade",],
+         ~ proportion + RobinhoodApp)
+```
+
+```{r}
+cor.test(data = frequency[frequency$Username == "Fidelity",],
+         ~ proportion + RobinhoodApp)
+```
+
+
+```{r}
+cor.test(data = frequency[frequency$Username == "Vanguard_Group",],
+         ~ proportion + RobinhoodApp)
+```
+
+```{r}
+data.corplot <- bind_rows(tidy_RH.tweets
+          ,tidy_fidelty.tweets
+          ,tidy_TDA.tweets
+          ,tidy_vangaurd.tweets
+          ,tidy_webullGlobal.tweets) %>% 
+  mutate(word = str_extract(word, "[a-z']+")) %>% 
+  count(Username, word) %>% 
+  group_by(Username) %>% 
+  mutate(proportion = n / sum(n)) %>% 
+  select(-n) %>% 
+  spread(Username, proportion) %>% 
+  select(RobinhoodApp, everything()) %>% 
+  select(-word)
+```
+
+```{r}
+M <- cor(data.corplot, use = "complete.obs")
+col<- colorRampPalette(c("gray75", "white", "#FF8F54"))(20)
+corrplot(M, method="color", col=col,  
+         type="upper", order="hclust", 
+         addCoef.col = "black", # Add coefficient of correlation
+         tl.col="black", tl.srt=45, #Text label color and rotation
+         # hide correlation coefficient on the principal diagonal
+         #diag=FALSE 
+         )
+```
+
